@@ -2,6 +2,7 @@ from scipy.spatial import distance as dist
 from imutils.video import VideoStream
 from imutils import face_utils
 from threading import Thread
+from  azure.iot.device  import  IoTHubDeviceClient,  Message
 import numpy as np
 import argparse
 import imutils
@@ -9,6 +10,7 @@ import time
 import dlib
 import cv2
 import os
+
 
 def alarm(msg):
     global alarm_status
@@ -26,8 +28,6 @@ def alarm(msg):
         s = 'espeak "' + msg + '"'
         os.system(s)
         saying = False
-
-VIDEO_NAME = 'test.mov'
 
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
@@ -65,13 +65,11 @@ def lip_distance(shape):
     distance = abs(top_mean[1] - low_mean[1])
     return distance
 
-CWD_PATH = os.getcwd()
-PATH_TO_VIDEO = os.path.join(CWD_PATH,VIDEO_NAME)
 
-# ap = argparse.ArgumentParser()
-# ap.add_argument("-w", "--webcam", type=int, default=0,
-               # help="index of webcam on system")
-# args = vars(ap.parse_args())
+ap = argparse.ArgumentParser()
+ap.add_argument("-w", "--webcam", type=int, default=0,
+                help="index of webcam on system")
+args = vars(ap.parse_args())
 
 EYE_AR_THRESH = 0.3
 EYE_AR_CONSEC_FRAMES = 30
@@ -82,84 +80,124 @@ saying = False
 COUNTER = 0
 
 detector = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
-predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
+predictor = dlib.shape_predictor('/home/m007ra/Desktop/IOT Codes and Files/Sensor Read/DrowsinessDetection_usingRPi/shape_predictor_68_face_landmarks.dat')
 
 
 print("-> Starting Video Stream")
-vs = cv2.VideoCapture(PATH_TO_VIDEO)
+vs = VideoStream(src=args["webcam"]).start()
 time.sleep(1.0)
 
-while vs.opened():
 
-    frame = vs.read()
-    frame = imutils.resize(frame, width=450)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-    rects = detector.detectMultiScale(gray, scaleFactor=1.1, 
-		minNeighbors=5, minSize=(30, 30),
-		flags=cv2.CASCADE_SCALE_IMAGE)
-
-    
-    for (x, y, w, h) in rects:
-        rect = dlib.rectangle(int(x), int(y), int(x + w),int(y + h))
-        
-        shape = predictor(gray, rect)
-        shape = face_utils.shape_to_np(shape)
-
-        eye = final_ear(shape)
-        ear = eye[0]
-        leftEye = eye [1]
-        rightEye = eye[2]
-
-        distance = lip_distance(shape)
-
-        leftEyeHull = cv2.convexHull(leftEye)
-        rightEyeHull = cv2.convexHull(rightEye)
-        cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
-        cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
-
-        lip = shape[48:60]
-        cv2.drawContours(frame, [lip], -1, (0, 255, 0), 1)
-
-        if ear < EYE_AR_THRESH:
-            COUNTER += 1
-
-            if COUNTER >= EYE_AR_CONSEC_FRAMES:
-                if alarm_status == False:
-                    alarm_status = True
-                    t = Thread(target=alarm, args=('wake up',))
-                    t.deamon = True
-                    t.start()
-
-                cv2.putText(frame, "DROWSINESS ALERT!", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-        else:
-            COUNTER = 0
-            alarm_status = False
-
-        if (distance > YAWN_THRESH):
-                cv2.putText(frame, "Yawn Alert", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                if alarm_status2 == False and saying == False:
-                    alarm_status2 = True
-                    t = Thread(target=alarm, args=('you are getting drowsy',))
-                    t.deamon = True
-                    t.start()
-        else:
-            alarm_status2 = False
-
-        cv2.putText(frame, "EAR: {:.2f}".format(ear), (300, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        cv2.putText(frame, "YAWN: {:.2f}".format(distance), (300, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+#  The  device  connection  string  to  authenticate  the  device  with  your  IoT  hub.
+#  Using  the  Azure  CLI:
+#  az  iot  hub  device-identity  show-connection-string  --hub-name  {YourIoTHubName}  --device-id  MyNodeDevice  --output  table
+CONNECTION_STRING  =  "HostName=Drowsiness.azure-devices.net;DeviceId=RasPi_Drowsiness;SharedAccessKey=AYJxOa1UQi08+Oor0ES/vm68yuNKq20cqIk9FZi7+7o="
 
 
-    cv2.imshow("Frame", frame)
-    key = cv2.waitKey(1) & 0xFF
+MSG_TXT  =  '{{"temperature":  {EAR},"humidity":  {yawn}}}'
+message=''
 
-    if key == ord("q"):
-        break
+def  iothub_client_init():
+        #  Create  an  IoT  Hub  client
+        client  =  IoTHubDeviceClient.create_from_connection_string(CONNECTION_STRING)
+        return  client
 
-cv2.destroyAllWindows()
-vs.stop()
+
+try:
+        client  =  iothub_client_init()
+        print  (  "IoT  Hub  device  sending  periodic  messages,  press  Ctrl-C  to  exit"  )
+
+        while  True:
+               
+               
+                frame = vs.read()
+                
+                (w, h, c) = frame.shape
+                
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+ 
+                rects = detector.detectMultiScale(gray, scaleFactor=1.1, 
+                    minNeighbors=5, minSize=(30, 30),
+                    flags=cv2.CASCADE_SCALE_IMAGE)
+
+                
+                for (x, y, w, h) in rects:
+                    rect = dlib.rectangle(int(x), int(y), int(x + w),int(y + h))
+                    
+                    shape = predictor(gray, rect)
+                    shape = face_utils.shape_to_np(shape)
+
+                    eye = final_ear(shape)
+                    
+                    
+                    ear = eye[0] #Data to be sent
+                    
+                    
+
+                    leftEye = eye [1]
+                    rightEye = eye[2]
+
+                    distance = lip_distance(shape)
+                    
+                    msg_txt_formatted  =  MSG_TXT.format(EAR=ear,  yawn=distance)
+                    message  =  Message(msg_txt_formatted)
+                    
+
+                    leftEyeHull = cv2.convexHull(leftEye)
+                    rightEyeHull = cv2.convexHull(rightEye)
+                    cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
+                    cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
+
+                    lip = shape[48:60]
+                    cv2.drawContours(frame, [lip], -1, (0, 255, 0), 1)
+
+                    if ear < EYE_AR_THRESH:
+                        COUNTER += 1
+
+                        if COUNTER >= EYE_AR_CONSEC_FRAMES:
+                            if alarm_status == False:
+                                alarm_status = True
+                                t = Thread(target=alarm, args=('wake up',))
+                                t.deamon = True
+                                t.start()
+
+                            cv2.putText(frame, "DROWSINESS ALERT!", (10, 30),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+                    else:
+                        COUNTER = 0
+                        alarm_status = False
+
+                    if (distance > YAWN_THRESH):
+                            cv2.putText(frame, "Yawn Alert", (10, 30),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                            if alarm_status2 == False and saying == False:
+                                alarm_status2 = True
+                                t = Thread(target=alarm, args=('you are getting drowsy',))
+                                t.deamon = True
+                                t.start()
+                    else:
+                        alarm_status2 = False
+
+                    cv2.putText(frame, "EAR: {:.2f}".format(ear), (300, 30),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.putText(frame, "YAWN: {:.2f}".format(distance), (300, 60),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+
+                cv2.imshow("Frame", frame)
+                key = cv2.waitKey(1) & 0xFF
+
+                if key == ord("q"):
+                    break
+                
+                print(  "Sending  message:  {}".format(message)  )
+                client.send_message(message)
+                print  (  "Message  successfully  sent"  )
+                time.sleep(1)
+
+except  KeyboardInterrupt  :  #  Send  the  message.
+                print(  "Sending  message:  {}".format(message)  )
+                client.send_message(message)
+                print  (  "Message  successfully  sent"  )
+                time.sleep(0.05)
