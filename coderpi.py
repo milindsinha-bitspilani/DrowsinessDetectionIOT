@@ -80,7 +80,7 @@ saying = False
 COUNTER = 0
 
 detector = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
-predictor = dlib.shape_predictor('/home/m007ra/Desktop/IOT Codes and Files/Sensor Read/DrowsinessDetection_usingRPi/shape_predictor_68_face_landmarks.dat')
+predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
 
 
 print("-> Starting Video Stream")
