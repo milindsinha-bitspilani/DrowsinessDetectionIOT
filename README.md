@@ -14,7 +14,7 @@
 ## Run 
 
 ```
-Python3 drowsiness_yawn.py -- webcam 1		
+Python3 coderpi.py -- webcam 1		
 ```
 
 ## Note
