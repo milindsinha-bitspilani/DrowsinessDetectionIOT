@@ -25,6 +25,6 @@ Python3 coderpi.py -- webcam 1
 Subject to changes
 EYE_AR_THRESH = 0.3
 EYE_AR_CONSEC_FRAMES = 30
-YAWN_THRESH = 10	//change this according to the distance from the camera
+YAWN_THRESH = 30	//change this according to the distance from the camera
 
 
